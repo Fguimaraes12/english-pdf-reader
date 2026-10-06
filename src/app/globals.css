@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+body {
+  @apply bg-stone-200 text-stone-900 dark:bg-stone-950 dark:text-stone-100;
+}
+
+.text-layer ::selection {
+  background: rgba(15, 118, 110, 0.35);
+}
