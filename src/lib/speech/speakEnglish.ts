@@ -219,10 +219,13 @@ async function playRemote(
   }
   try {
     onStart?.();
-    const blob = await synthesizeSpeech({ text: clean, apiKey, speed: rate });
+    // Velocidade via playbackRate (funciona com qualquer modelo/voz);
+    // pede o áudio em velocidade neutra para não duplicar o efeito.
+    const blob = await synthesizeSpeech({ text: clean, apiKey, speed: 1 });
     stopRemoteAudio();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    audio.playbackRate = rate;
     currentAudio = audio;
     currentAudioUrl = url;
     audio.onended = () => {

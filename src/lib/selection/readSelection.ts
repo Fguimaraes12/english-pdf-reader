@@ -3,13 +3,18 @@ import type { TextSelection } from "@/types/translation";
 
 function extractContext(anchorNode: Node, text: string): string {
   const element = anchorNode instanceof Element ? anchorNode : anchorNode.parentElement;
-  const layer = element?.closest("[data-text-layer]");
+  const layer = element?.closest("[data-text-layer], [data-extracted-layer]");
   if (!layer) return "";
 
-  const full = Array.from(layer.querySelectorAll("span"))
-    .map((span) => span.textContent ?? "")
-    .join(" ")
-    .replace(/\s+/g, " ");
+  // Modo PDF: spans posicionados; modo extraído: parágrafos + seção da página.
+  // No modo PDF lê só os spans posicionados (filhos diretos): o textContent
+  // deles já inclui os fragmentos internos e as palavras grifadas (<mark>).
+  const full = layer.hasAttribute("data-extracted-layer")
+    ? (layer.textContent ?? "").replace(/\s+/g, " ")
+    : Array.from(layer.querySelectorAll(":scope > span"))
+        .map((span) => span.textContent ?? "")
+        .join(" ")
+        .replace(/\s+/g, " ");
   const index = full.indexOf(text.slice(0, 30));
   if (index < 0) return full.slice(0, CONTEXT_RADIUS * 2);
   return full.slice(Math.max(0, index - CONTEXT_RADIUS), index + text.length + CONTEXT_RADIUS);

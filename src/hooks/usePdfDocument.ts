@@ -6,7 +6,7 @@ import { loadPdfDocument } from "@/lib/pdf/loadPdfDocument";
 
 type State =
   | { status: "loading" }
-  | { status: "error" }
+  | { status: "error"; message?: string }
   | { status: "ready"; pdf: PDFDocumentProxy; aspectRatio: string };
 
 export function usePdfDocument(file: File): State {
@@ -21,8 +21,14 @@ export function usePdfDocument(file: File): State {
         const pdf = await loadPdfDocument(file);
         const { width, height } = (await pdf.getPage(1)).getViewport({ scale: 1 });
         if (!cancelled) setState({ status: "ready", pdf, aspectRatio: `${width} / ${height}` });
-      } catch {
-        if (!cancelled) setState({ status: "error" });
+      } catch (error) {
+        console.error("Falha ao abrir PDF", error);
+        if (!cancelled) {
+          setState({
+            status: "error",
+            message: error instanceof Error && error.message ? error.message : undefined,
+          });
+        }
       }
     })();
 

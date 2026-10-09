@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { translateText } from "@/lib/openrouter/translateText";
+import { streamTranslateText, translateText } from "@/lib/openrouter/translateText";
 import { translationCache } from "@/lib/storage/translationCache";
 import type { TextSelection, Translation, TranslationState } from "@/types/translation";
 
@@ -10,13 +10,13 @@ interface Options {
   model: string;
 }
 
-const isSingleWord = (text: string) => !/\s/.test(text);
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
 export function useTranslation({ apiKey, model }: Options) {
   const [state, setState] = useState<TranslationState>({ status: "idle" });
   const jobs = useRef(new Map<string, Promise<Translation>>());
   const controller = useRef<AbortController | null>(null);
+  const streamController = useRef<AbortController | null>(null);
   const requestId = useRef(0);
 
   /** Busca no cache, reaproveita chamadas em andamento ou chama a API. */
@@ -56,29 +56,83 @@ export function useTranslation({ apiKey, model }: Options) {
         setState({ status: "error", message: "Cadastre sua chave da OpenRouter em “Configurar chave”." });
         return;
       }
+      // Cache instantâneo (ex: palavra já pré-traduzida ao selecionar).
+      const cacheKey = `${selection.text}|${selection.context}`;
+      const cached = translationCache.get(cacheKey);
+      if (cached) {
+        setState({ status: "success", data: cached });
+        return;
+      }
+
       const id = ++requestId.current;
+
+      // Prefetch ainda rodando para o mesmo trecho: reaproveita em vez de
+      // disparar uma segunda requisição igual.
+      const running = jobs.current.get(cacheKey);
+      if (running) {
+        setState({ status: "loading" });
+        try {
+          const data = await running;
+          if (id === requestId.current) setState({ status: "success", data });
+          return;
+        } catch {
+          // prefetch abortou/falhou: cai para o streaming abaixo
+        }
+      }
+      streamController.current?.abort();
+      streamController.current = new AbortController();
+      const signal = streamController.current.signal;
       setState({ status: "loading" });
+
+      const fail = (error: unknown) => {
+        if (isAbort(error) || id !== requestId.current) return;
+        setState({ status: "error", message: error instanceof Error ? error.message : "Erro inesperado." });
+      };
+
       try {
-        const data = await request(selection);
+        const data = await streamTranslateText({
+          text: selection.text,
+          context: selection.context,
+          apiKey,
+          model,
+          signal,
+          onToken: (partial) => {
+            if (id === requestId.current) setState({ status: "streaming", partial });
+          },
+        });
+        translationCache.set(cacheKey, data);
         if (id === requestId.current) setState({ status: "success", data });
       } catch (error) {
         if (isAbort(error) || id !== requestId.current) return;
-        setState({ status: "error", message: error instanceof Error ? error.message : "Erro inesperado." });
+        // Fallback: requisição comum sem streaming (ex: modelo sem suporte).
+        try {
+          const data = await translateText({
+            text: selection.text,
+            context: selection.context,
+            apiKey,
+            model,
+          });
+          translationCache.set(cacheKey, data);
+          if (id === requestId.current) setState({ status: "success", data });
+        } catch (fallbackError) {
+          fail(fallbackError);
+        }
       }
     },
-    [apiKey, request],
+    [apiKey, model],
   );
 
-  /** Começa a traduzir palavras soltas antes de a pessoa tocar em "Traduzir". */
+  /** Pré-traduz a seleção antes de a pessoa tocar em "Traduzir" (palavras e frases). */
   const prefetch = useCallback(
     (selection: TextSelection) => {
-      if (apiKey && isSingleWord(selection.text)) request(selection).catch(() => {});
+      if (apiKey) request(selection).catch(() => {});
     },
     [apiKey, request],
   );
 
   const reset = useCallback(() => {
     requestId.current++;
+    streamController.current?.abort();
     setState({ status: "idle" });
   }, []);
 

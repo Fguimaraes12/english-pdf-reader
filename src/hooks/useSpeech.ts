@@ -1,16 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   isSpeechSupported,
   speakEnglishWithFallback,
   stopSpeaking,
 } from "@/lib/speech/speakEnglish";
+import {
+  getSpeechRate,
+  setSpeechRate,
+  subscribeSpeechRate,
+} from "@/lib/speech/speechRate";
 
 export function useSpeech(apiKey = "") {
   const [supported, setSupported] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const rate = useSyncExternalStore(subscribeSpeechRate, getSpeechRate, () => 1 as const);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -39,6 +45,7 @@ export function useSpeech(apiKey = "") {
       if (timer.current) window.clearTimeout(timer.current);
       void speakEnglishWithFallback(text, {
         apiKey,
+        rate: getSpeechRate(),
         onStart: () => setIsSpeaking(true),
         onEnd: () => setIsSpeaking(false),
         onFallbackError: (message) => setAudioError(message),
@@ -60,5 +67,5 @@ export function useSpeech(apiKey = "") {
   // Botão aparece se há voz local OU chave para o TTS remoto.
   const canSpeak = supported || apiKey.trim().length > 0;
 
-  return { supported: canSpeak, isSpeaking, audioError, speak, stop };
+  return { supported: canSpeak, isSpeaking, audioError, speak, stop, rate, setRate: setSpeechRate };
 }

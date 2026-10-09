@@ -6,6 +6,7 @@ export interface Translation {
 export type TranslationState =
   | { status: "idle" }
   | { status: "loading" }
+  | { status: "streaming"; partial: Translation }
   | { status: "success"; data: Translation }
   | { status: "error"; message: string };
 

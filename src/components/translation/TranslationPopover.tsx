@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { SpeakerIcon } from "@/components/ui/SpeakerIcon";
+import { SpeedControl } from "@/components/speech/SpeedControl";
 import { useSpeech } from "@/hooks/useSpeech";
 import type { TextSelection, TranslationState } from "@/types/translation";
 
@@ -10,12 +11,16 @@ interface TranslationPopoverProps {
   state: TranslationState;
   apiKey: string;
   onTranslate: () => void;
+  onSave: () => void;
+  saved: boolean;
+  onLearned: () => void;
+  learned: boolean;
 }
 
 const HALF_WIDTH = 160;
 
-export function TranslationPopover({ selection, state, apiKey, onTranslate }: TranslationPopoverProps) {
-  const { supported, isSpeaking, audioError, speak, stop } = useSpeech(apiKey);
+export function TranslationPopover({ selection, state, apiKey, onTranslate, onSave, saved, onLearned, learned }: TranslationPopoverProps) {
+  const { supported, isSpeaking, audioError, speak, stop, rate, setRate } = useSpeech(apiKey);
 
   useEffect(() => {
     if (!selection) stop();
@@ -36,13 +41,26 @@ export function TranslationPopover({ selection, state, apiKey, onTranslate }: Tr
       {state.status === "idle" ? (
         <button
           onClick={onTranslate}
-          className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white shadow-lg dark:bg-stone-100 dark:text-stone-900"
+          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
         >
           Traduzir
         </button>
       ) : (
         <div className="min-w-44 max-w-[min(300px,90vw)] rounded-xl border border-stone-300 bg-white px-4 py-3 text-center shadow-xl dark:border-stone-600 dark:bg-stone-800">
           {state.status === "loading" && <p className="text-sm text-stone-500">Traduzindo…</p>}
+          {state.status === "streaming" && (
+            <>
+              <p className="font-serif text-lg font-semibold">
+                {state.partial.translation || "…"}
+                <span className="animate-pulse text-teal-600">▍</span>
+              </p>
+              {state.partial.pronunciation && (
+                <div className="text-teal-700 dark:text-teal-300">
+                  <span>{state.partial.pronunciation}</span>
+                </div>
+              )}
+            </>
+          )}
           {state.status === "error" && <p className="text-sm text-stone-500">{state.message}</p>}
           {state.status === "success" && (
             <>
@@ -61,6 +79,35 @@ export function TranslationPopover({ selection, state, apiKey, onTranslate }: Tr
                 )}
               </div>
               {audioError && <p className="mt-1 text-xs text-red-500">{audioError}</p>}
+              {supported && (
+                <div className="mt-1.5 flex justify-center">
+                  <SpeedControl rate={rate} onChange={setRate} />
+                </div>
+              )}
+              <button
+                onClick={onSave}
+                disabled={saved}
+                className={`mt-2 w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  saved
+                    ? "border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-900 dark:text-green-200"
+                    : "border-teal-700 bg-teal-700 text-white hover:bg-teal-800"
+                }`}
+              >
+                {saved ? "✓ Salva no caderno" : "Salvar no caderno"}
+              </button>
+              {!/\s/.test(selection.text) ? null : (
+              <button
+                onClick={onLearned}
+                disabled={learned}
+                className={`mt-1.5 w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  learned
+                    ? "border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-900 dark:text-green-200"
+                    : "border-green-600 text-green-700 hover:bg-green-50 dark:text-green-300 dark:hover:bg-green-900/40"
+                }`}
+              >
+                {learned ? "✓ Dominada" : "Aprendi ✓"}
+              </button>
+              )}
             </>
           )}
         </div>
